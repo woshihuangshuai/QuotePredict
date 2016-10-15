@@ -6,8 +6,12 @@
 # 11月6日之后实行冬令时 10:30 - 17:00
 
 
-from pymongo    import MongoClient
-from datetime   import datetime
+from pymongo        import MongoClient
+from datetime       import datetime
+from collections    import defaultdict
+from gensim         import corpora
+from pprint         import pprint
+import nltk
 import string
 import re
 
@@ -24,7 +28,7 @@ def GetCompanyNews(company = ''):
         return None
     news_list   = list(cursor)
     client.close()
-    print ('数据库中    %s  公司的新闻共  %d  条。' %(company, len(news_list)))
+    print ('数据库中%s\t公司的新闻共\t%d\t条。' %(company, len(news_list)))
     return news_list
 
 
@@ -75,8 +79,27 @@ def NewsProcess(news_list):
         item        = (news['corp_name'], post_time, document) 
         Processed_News_list.append(item)
     
-    print ('在交易时间内发布的新闻共    %d  条。' % len(Processed_News_list))
+    print ('在交易时间内发布的新闻共\t%d\t条。' % len(Processed_News_list))
     return Processed_News_list
+
+
+def GenerateDict(Processed_News_list):
+    texts = [ nltk.word_tokenize(news[2].lower()) for news in Processed_News_list]
+
+    frequency = defaultdict(int)
+    for text in texts:
+        for token in text:
+            frequency[token] += 1
+    texts = [[token for token in text if frequency[token] > 1]
+                for text in texts]
+    
+    pprint(texts)
+
+    dictionary = corpora.Dictionary(texts)
+
+    print (dictionary)
+    pprint(dictionary.token2id)
+    # dictionary.save('/companynews.dict')
 
 
 if __name__ == '__main__':
@@ -85,8 +108,11 @@ if __name__ == '__main__':
         exit(0)
     news_list = GetCompanyNews(company)
     Processed_News_list = NewsProcess(news_list)
+
     for i in Processed_News_list:
-        print(i[0], '\t', i[1], '\t', i[2])
+        print(i[0], '\t', i[1], '\t', i[2].lower())
+
+    GenerateDict(Processed_News_list)
 
 
 
