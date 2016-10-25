@@ -7,43 +7,57 @@
 
 
 from pymongo        import MongoClient
-from datetime       import datetime
 from collections    import defaultdict
 from gensim         import corpora
 from pprint         import pprint
+from sklearn.svm    import SVR
+from sklearn        import preprocessing
+
 import nltk
-import string
+import string   
 import re
+import numpy        as np
+import gensim
+import time
+import datetime
+
 
 def GetCompanyNews(company = ''):
     client      = MongoClient('localhost', 27017)
-    db          = client['YahooFinanceNews']
-    collection  = db['company_news']
+    news_db     = client['YahooFinanceNews']
+    news_collection  = news_db['company_news']
+    quote_db    = client['Quote']
+    quote_collection = quote_db['YahooFinanceQuote']
+
     if company  == '':
         query   = {'corp_name': {'$ne':['']}}
     else:
         query   = {'corp_name': company}
-    cursor      = collection.find(query)
+    cursor      = news_collection.find(query)
     if cursor   == None:
         return None
-    news_list   = list(cursor)
-    client.close()
+
+    news_list   = list(cursor) 
     print ('数据库中%s\t公司的新闻共\t%d\t条。' %(company, len(news_list)))
-    return news_list
-
-
-def NewsProcess(news_list):
     if news_list == None:
         return None
 
-    Processed_News_list = []
+    text_list = []  # text data
+    quote_list  = []  # quote data
+
     for news in news_list:
         if news['datetime'] == None or len(news['content']) == 0:
             continue
 
         # process datetime
-        post_time = datetime.strptime(news['datetime'], '%Y-%m-%dT%H:%M:%S.000Z')
+        post_time = datetime.datetime.strptime(news['datetime'], '%Y-%m-%dT%H:%M:%S.000Z')
 
+        if post_time.year < 2016:
+            continue
+        if post_time.year == 2016 and post_time.month < 9:
+            continue
+        if post_time.year == 2016 and post_time.month == 9 and post_time.day < 20:
+            continue
         # 夏令时
         if (post_time.month >3 and post_time.month < 11) or (post_time.month == 3 and post_time.day >= 13)\
             or (post_time.month == 11 and post_time.day < 6):
@@ -62,6 +76,44 @@ def NewsProcess(news_list):
             else:
                 continue            
 
+        str_year    = str(post_time.year)
+        if post_time.month < 10:
+            str_month   = str('0%d') % post_time.month
+        else:
+            str_month   = str(post_time.month)
+        if post_time.day <10:
+            str_day     = str('0%d') % post_time.day
+        else:
+            str_day     = str(post_time.day)
+        d = int(str_year + str_month + str_day)
+        query = {'$and':[
+                        {'company'  : news['corp_name']},
+                        {'date'     : d}
+                        ]}
+        q_cursor = quote_collection.find(query)
+        if q_cursor.count() == 0:
+            # print(query, 'no quote.')
+            continue
+
+        delta_6_mins = datetime.timedelta(minutes=6)
+        delta_20_mins = datetime.timedelta(minutes=20)
+        delta_12_hours = datetime.timedelta(hours=12)
+        quote_start = 0
+        quote_end   = 0
+
+        for price in q_cursor[0]['quote']:
+            q_time = datetime.datetime.fromtimestamp(price['Timestamp']) - delta_12_hours
+            if post_time <= q_time and q_time <= (post_time + delta_6_mins) and quote_start == 0:
+                quote_start = price['open']
+                # print('post\t', post_time)
+                # print('start\t', q_time)
+            if (post_time + delta_20_mins) <= q_time and q_time <= (post_time + delta_20_mins + delta_6_mins) and quote_end == 0:
+                quote_end   = price['open']
+                # print('end\t', q_time)
+                break
+        if quote_start == 0 or quote_end == 0:
+            continue
+
         # process news content
         intab       = string.punctuation \
                     + '～！@＃¥％……&＊（）｛｝［］｜、；：‘’“”，。／？《》＝＋－——｀' \
@@ -75,16 +127,18 @@ def NewsProcess(news_list):
             doc_lines.append(line)
         document    = ' '.join(doc_lines)
         document    = re.subn(r' +', ' ', document)[0]
+        item        = (news['corp_name'], post_time, document.lower()) 
+        
+        text_list.append(item)
+        quote_list.append((quote_start, quote_end))
 
-        item        = (news['corp_name'], post_time, document) 
-        Processed_News_list.append(item)
-    
-    print ('在交易时间内发布的新闻共\t%d\t条。' % len(Processed_News_list))
-    return Processed_News_list
+    print ('在交易时间内发布的新闻共\t%d\t条。' % len(text_list))
+    client.close()
+    return text_list, quote_list
 
 
-def GenerateDict(Processed_News_list):
-    texts = [ nltk.word_tokenize(news[2].lower()) for news in Processed_News_list]
+def GetDictionary(text_list):
+    texts = [nltk.word_tokenize(news[2]) for news in text_list]
 
     frequency = defaultdict(int)
     for text in texts:
@@ -93,28 +147,45 @@ def GenerateDict(Processed_News_list):
     texts = [[token for token in text if frequency[token] > 1]
                 for text in texts]
     
-    pprint(texts)
-
     dictionary = corpora.Dictionary(texts)
-
-    print (dictionary)
-    pprint(dictionary.token2id)
+    num_of_feature = len(dictionary.keys())
     # dictionary.save('/companynews.dict')
+    corpus = [dictionary.doc2bow(text) for text in texts]
+    numpy_matrix = gensim.matutils.corpus2dense(corpus, num_terms=num_of_feature)
+    return numpy_matrix.T
+
+
+def TrainSVR(train_set_X, train_set_Y):
+    svr_rbf = SVR(kernel='rbf', C=1e3, gamma=0.1)
+    svr_rbf.fit(train_set_X, train_set_Y)
+    return svr_rbf
 
 
 if __name__ == '__main__':
     company = input('请输入公司缩写:\t')
-    if company == None:
-        exit(0)
-    news_list = GetCompanyNews(company)
-    Processed_News_list = NewsProcess(news_list)
+    text_list, quote_list = GetCompanyNews(company)
+    # for news in corpus:
+    #     print(news[0], '\t', news[1], '\t', news[2])
+    numpy_matrix = GetDictionary(text_list)
+    X = numpy_matrix
+    Y = [quote_end - quote_start for quote_start, quote_end in quote_list]
+    X_normalized = preprocessing.normalize(X, norm='l2')
+    Y_normalized = Y # preprocessing.normalize(Y, norm='l2')
+    t = int(len(Y) * 0.8)
+    train_set_X = X_normalized[:t]
+    train_set_Y = Y_normalized[:t]
+    test_set_X  = X_normalized[t:]
+    test_set_Y  = Y_normalized[t:]
+    svr_rbf = TrainSVR(train_set_X, train_set_Y)
+    Y_rbf = svr_rbf.predict(test_set_X)
+    pprint(test_set_Y)
+    pprint(Y_rbf)
 
-    for i in Processed_News_list:
-        print(i[0], '\t', i[1], '\t', i[2].lower())
-
-    GenerateDict(Processed_News_list)
-
-
+    c = 0
+    for i in range(len(test_set_Y)):
+        if (Y_rbf[i]>0 and test_set_Y[i]>0) or (Y_rbf[i]<0 and test_set_Y[i]<0):
+            c += 1
+    print (c/len(test_set_Y))
 
 
 
