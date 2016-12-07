@@ -19,9 +19,9 @@
   We predict quote of certain company **in 20 minutes** after the time when the news about certain company has been posted.
   
 ## Experiment Result
-  
-  accuracy:
-  
+
+accuracy:
+
     SVR: 48%(Gaussian kernel)
     
     SVM: 49%(linear kernel); 51%(polynomial kernel); 52%(Gaussian kernel)
