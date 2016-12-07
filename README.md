@@ -21,6 +21,7 @@
 ## Experiment Result
   
   accuracy:
+  
     SVR: 48%(Gaussian kernel)
     
     SVM: 49%(linear kernel); 51%(polynomial kernel); 52%(Gaussian kernel)
