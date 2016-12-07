@@ -1,6 +1,6 @@
 # QuotePredict
 
-## dependency
+## Dependency
 
   gensim
   
@@ -8,15 +8,15 @@
 
 ## Data
   
-  News date is crawled from Yahoo! Finance with YahooFianceNewsSpider.
+  **News date** is crawled from Yahoo! Finance with YahooFianceNewsSpider.
   
-  Quote date is get from Yahoo! Finance with getYahooQuote.py in YahooFinanceNewsSpider.
+  **Quote date** is get from Yahoo! Finance with getYahooQuote.py in YahooFinanceNewsSpider.
   
 ## Method
 
-  We use BOW(Bag of Words) to map news content to sparse vector and use SVR and SVM to predict quote direction.
+  We use **BOW(Bag of Words)** to map news content to sparse vector and use **SVR** and **SVM** to predict quote direction.
   
-  We predict quote of certain company in 20 minutes after the time when the news about certain company has been posted.
+  We predict quote of certain company **in 20 minutes** after the time when the news about certain company has been posted.
   
 ## Experiment Result
   
