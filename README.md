@@ -20,13 +20,13 @@
   
 ## Experiment Result
 
-accuracy:
+  accuracy:
+    
+  1. SVR: 48%(Gaussian kernel)
 
-    SVR: 48%(Gaussian kernel)
+  2. SVM: 49%(linear kernel)、51%(polynomial kernel)、52%(Gaussian kernel)
     
-    SVM: 49%(linear kernel); 51%(polynomial kernel); 52%(Gaussian kernel)
-    
-  This is a cursory trial and There have many things can be optimized in terms of data clean, Textual representation(BOW,Noun     Phrases,Named Entities, Proper Nouns), classifier and so on.
+This is a cursory trial and There have many things can be optimized in terms of data clean, Textual representation(BOW,Noun     Phrases,Named Entities, Proper Nouns), classifier and so on.
   
 ## An idea
 
